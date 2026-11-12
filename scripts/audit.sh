@@ -25,5 +25,14 @@ check 'MaxAuthTries' 3 "$(value maxauthtries)"
 check 'UFW active' active "$(awk '/^Status:/{print $2}' <<< "$UFW")"
 check 'Incoming policy deny' deny "$(sed -n 's/^Default: \([^ ]*\) (incoming).*/\1/p' <<< "$UFW")"
 awk -F: '$3>=1000 && $3<65534 {printf "User: %s uid=%s\n",$1,$3}' /etc/passwd
+echo '[4] Web server'
+check 'Nginx active' active "$(systemctl is-active nginx)"
+if nginx -t >/dev/null 2>&1; then syntax=yes; else syntax=no; fi
+check 'Nginx syntax' yes "$syntax"
+if openssl x509 -in /etc/ssl/certs/devops.crt -noout -checkend "${CERT_MIN_SECONDS:-2592000}" >/dev/null 2>&1; then cert=yes; else cert=no; fi
+check 'Certificate validity' yes "$cert"
+secure=no
+if [[ -d /var/www/devops-site ]] && writable=$(find /var/www/devops-site -perm -o+w) && [[ -z "$writable" ]] && [[ $(stat -c '%a' /etc/ssl/private/devops.key) == 600 ]]; then secure=yes; fi
+check 'Site and key permissions' yes "$secure"
 echo "Passed: $PASS; failed: $FAIL"
 [[ $FAIL -eq 0 ]]

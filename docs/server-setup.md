@@ -76,7 +76,7 @@ VM и снимки сохраняются для следующих практи
 Откат: выключить VM, VBoxManage snapshot devops-vm restore 01-clean-install.
 После отката на 01/02 выставить гостевой порт NAT 22.
 
-## 8. Имя узла и клиент
+## 9. Имя узла и клиент
 /etc/hosts на Mac: 192.168.56.101 devops.local.
 /etc/hosts VM: 127.0.1.1 devops-vm.devops.local devops-vm.
 Команда: sudo hostnamectl set-hostname devops-vm.
@@ -93,7 +93,7 @@ Host devops devops.local
 для закреплённого ключа той же VM. Отпечаток проверен по ключу сервера.
 Проверки с Mac: ping devops.local; ssh devops; ssh -p 2222 devops@devops.local.
 
-## 9. Восстановление после 01-clean-install за 10 минут
+## 10. Восстановление после 01-clean-install за 10 минут
 1. Подключиться student@127.0.0.1 -p 2222; оставить эту сессию открытой.
 2. sudo adduser devops; sudo usermod -aG sudo devops. Задать пароль для sudo.
 3. На Mac: ssh-copy-id -i /путь/devops_vm.pub -p 2222 devops@127.0.0.1.
@@ -107,7 +107,7 @@ Host devops devops.local
 9. Удалить bootstrap NOPASSWD: sudo rm -f /etc/sudoers.d/90-cloud-init-users; sudo visudo -c.
 10. sudo bash scripts/audit.sh — 6 OK, exit 0.
 
-## 10. Аудит и туннель
+## 11. Аудит и туннель
 Для отрицательного теста только в файле конфигурации временно выставлено MaxAuthTries 10.
 Аудит вернул 1; значение возвращено на 3; sshd -t и повторный аудит прошли.
 Скрипт проверяет текущую конфигурацию на диске через sshd -T, а не значения уже запущенного процесса.
@@ -117,3 +117,25 @@ ssh -L 9090:127.0.0.1:8080 -N devops на Mac; curl localhost:9090 возвра�
 
 ## Источники
 Методичка практики 5; https://www.virtualbox.org/ ; https://cloud-images.ubuntu.com/noble/current/
+
+## 8. Веб-сервер
+Установлены nginx и rsync: sudo apt update && sudo apt install -y nginx rsync.
+Конфигурация: /etc/nginx/sites-available/devops-site; ссылка в sites-enabled.
+Ссылка sites-enabled/default удалена; исходный файл сохранён.
+Каталог /var/www/devops-site принадлежит devops:devops, каталоги 755, файлы 644.
+HTTP 80 перенаправляет на HTTPS 443 кодом 301. server_name devops.local.
+TLSv1.2 и TLSv1.3; root /var/www/devops-site; index index.html;
+location / { try_files $uri $uri/ =404; } error_page 404 /404.html;
+Журналы: /var/log/nginx/devops-site.access.log и devops-site.error.log.
+Сертификат /etc/ssl/certs/devops.crt, root:root 644; ключ /etc/ssl/private/devops.key, root:root 600.
+Создание сертификата на 365 дней:
+```
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/devops.key -out /etc/ssl/certs/devops.crt -subj '/CN=devops.local' -addext 'subjectAltName=DNS:devops.local'
+sudo chmod 600 /etc/ssl/private/devops.key
+sudo nginx -t && sudo systemctl reload nginx
+```
+Закрытый ключ остаётся на VM. Открытый сертификат копируется через SSH для curl --cacert.
+Снимок 04-nginx-https создан после настройки HTTPS.
+scripts/deploy.sh синхронизирует site/ через rsync; --dry-run показывает план.
+Сценарий запрещает доставку без index.html и с незафиксированными изменениями,
+после доставки проверяет HTTPS. Код 0 означает успех; код 1 — ошибку.
