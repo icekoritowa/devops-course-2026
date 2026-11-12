@@ -17,5 +17,5 @@ esac
 HASH=$(git -C "$ROOT" rev-parse --short HEAD)
 rsync -avz --delete --chmod=D755,F644 "${DRY[@]}" -e 'ssh -o BatchMode=yes -o ConnectTimeout=5' "$ROOT/site/" "$REMOTE:$REMOTE_DIR/" || fail 'Synchronization failed'
 if [[ ${#DRY[@]} -gt 0 ]]; then echo "Dry run: $HASH"; exit 0; fi
-curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --cacert "$CA_CERT" "$SITE_URL/" > /dev/null || fail 'HTTPS check failed'
+curl -4 --fail --silent --show-error --connect-timeout 5 --max-time 15 --cacert "$CA_CERT" "$SITE_URL/" > /dev/null || fail 'HTTPS check failed'
 echo "Deployed: $HASH"
