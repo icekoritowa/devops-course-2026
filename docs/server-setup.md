@@ -76,7 +76,7 @@ VM и снимки сохраняются для следующих практи
 Откат: выключить VM, VBoxManage snapshot devops-vm restore 01-clean-install.
 После отката на 01/02 выставить гостевой порт NAT 22.
 
-## 9. Имя узла и клиент
+## 10. Имя узла и клиент
 /etc/hosts на Mac: 192.168.56.101 devops.local.
 /etc/hosts VM: 127.0.1.1 devops-vm.devops.local devops-vm.
 Команда: sudo hostnamectl set-hostname devops-vm.
@@ -93,7 +93,7 @@ Host devops devops.local
 для закреплённого ключа той же VM. Отпечаток проверен по ключу сервера.
 Проверки с Mac: ping devops.local; ssh devops; ssh -p 2222 devops@devops.local.
 
-## 10. Восстановление после 01-clean-install за 10 минут
+## 11. Восстановление после 01-clean-install за 10 минут
 1. Подключиться student@127.0.0.1 -p 2222; оставить эту сессию открытой.
 2. sudo adduser devops; sudo usermod -aG sudo devops. Задать пароль для sudo.
 3. На Mac: ssh-copy-id -i /путь/devops_vm.pub -p 2222 devops@127.0.0.1.
@@ -103,11 +103,11 @@ Host devops devops.local
 6. sudo sshd -t; sudo systemctl disable --now ssh.socket;
    sudo systemctl enable --now ssh.service; sudo systemctl restart ssh.
 7. На Mac изменить NAT на гостевой порт 2222. Проверить новое соединение и отказы root/без ключа.
-8. Применить UFW из раздела 6. Настроить hostname и hosts из раздела 8.
+8. Применить UFW из раздела 6. Настроить hostname и hosts из раздела 10.
 9. Удалить bootstrap NOPASSWD: sudo rm -f /etc/sudoers.d/90-cloud-init-users; sudo visudo -c.
 10. sudo bash scripts/audit.sh — 6 OK, exit 0.
 
-## 11. Аудит и туннель
+## 12. Аудит и туннель
 Для отрицательного теста только в файле конфигурации временно выставлено MaxAuthTries 10.
 Аудит вернул 1; значение возвращено на 3; sshd -t и повторный аудит прошли.
 Скрипт проверяет текущую конфигурацию на диске через sshd -T, а не значения уже запущенного процесса.
@@ -139,3 +139,34 @@ sudo nginx -t && sudo systemctl reload nginx
 scripts/deploy.sh синхронизирует site/ через rsync; --dry-run показывает план.
 Сценарий запрещает доставку без index.html и с незафиксированными изменениями,
 после доставки проверяет HTTPS. Код 0 означает успех; код 1 — ошибку.
+
+## 9. Контейнеризация
+Docker Engine 29.9.3, Compose 5.7.1 установлены из официального apt-репозитория Docker.
+Пакеты: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin.
+Пользователь devops включён в docker: sudo usermod -aG docker devops; затем новый вход.
+Группа docker даёт фактические права root на VM.
+Проект: /home/devops/app. Запуск: cd ~/app && docker compose up -d --build --wait.
+.env хранится только на VM, владелец devops, режим 600; образ и Git его исключают.
+Flask работает через Gunicorn от пользователя app, порт 127.0.0.1:5000.
+PostgreSQL 16 находится в сети app_backend, имя db; порт 5432 наружу не опубликован.
+Том app_db_data хранит /var/lib/postgresql/data. down сохраняет том; down -v удаляет данные.
+Приложение ждёт healthcheck PostgreSQL (pg_isready). Контейнеры restart: unless-stopped.
+HTTPS Nginx /app/ проксирует на http://127.0.0.1:5000/; завершающий / убирает префикс /app/.
+Конфигурация в HTTPS-блоке /etc/nginx/sites-available/devops-site:
+```nginx
+location /app/ {
+    proxy_pass http://127.0.0.1:5000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+Применение: sudo nginx -t && sudo systemctl reload nginx.
+Проверки: curl http://127.0.0.1:5000/health; docker compose ps; docker compose logs --tail=30.
+На Mac: curl -4 --cacert ~/devops.crt https://devops.local/app/.
+Аудит дополнен Docker, здоровьем БД, ограничением портов и правами .env: 14 проверок.
+При временной публикации 0.0.0.0:5000 аудит возвращает 1; после исправления — 0.
+Docker-публикация порта обходит обычные входящие правила UFW; используется привязка к loopback.
+При остановке app Nginx отвечает 502; диагностика: журнал Nginx, compose ps/logs, curl backend.
+Снимок итогового состояния: 05-docker-compose.
