@@ -34,5 +34,12 @@ check 'Certificate validity' yes "$cert"
 secure=no
 if [[ -d /var/www/devops-site ]] && writable=$(find /var/www/devops-site -perm -o+w) && [[ -z "$writable" ]] && [[ $(stat -c '%a' /etc/ssl/private/devops.key) == 600 ]]; then secure=yes; fi
 check 'Site and key permissions' yes "$secure"
+echo '[5] Containers'
+check 'Docker active' active "$(systemctl is-active docker)"
+check 'PostgreSQL healthy' healthy "$(docker inspect -f '{{.State.Health.Status}}' app-db-1 2>/dev/null)"
+listeners=$(ss -H -ltn) || exit 1
+unsafe=$(awk '$4 ~ /:(5000|5432)$/ && $4 !~ /^127\.0\.0\.1:(5000|5432)$/ {print $4}' <<< "$listeners")
+check 'Database and application ports restricted' '' "$unsafe"
+check 'Application env mode' 600 "$(stat -c '%a' /home/devops/app/.env 2>/dev/null)"
 echo "Passed: $PASS; failed: $FAIL"
 [[ $FAIL -eq 0 ]]
